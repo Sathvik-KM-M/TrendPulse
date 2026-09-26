@@ -2,11 +2,27 @@ from groq import Groq
 
 KEY_PATH = "/home/mglocadmin/Downloads/grok_api.txt"
 
-
 def _get_client():
+    """Read the API key from Streamlit secrets, env var, or file."""
+    # 1. Try Streamlit secrets (for cloud deployment)
+    try:
+        import streamlit as st
+        api_key = st.secrets.get("GROQ_API_KEY")
+        if api_key:
+            return Groq(api_key=api_key)
+    except Exception:
+        pass
+
+    # 2. Try environment variable
+    api_key = os.environ.get("GROQ_API_KEY")
+    if api_key:
+        return Groq(api_key=api_key)
+
+    # 3. Fall back to local file
     with open(KEY_PATH, "r") as f:
         api_key = f.read().strip()
     return Groq(api_key=api_key)
+
 
 
 PROMPT_TEMPLATE = """You are a meme writer for social media (Instagram, Reddit).
