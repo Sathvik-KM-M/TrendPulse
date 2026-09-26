@@ -2,6 +2,8 @@
 
 **Turning live trends into memes — a real-time data pipeline + LLM project.**
 🔗 **Live demo:** https://trendpulse-streaming.streamlit.app
+![TrendPulse screenshot](demo.png)
+
 ## What it does
 1. Reads trending topics from Reddit / news RSS
 2. Processes them with PySpark (sentiment + topic ranking)
