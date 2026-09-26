@@ -2,7 +2,7 @@
 
 **Turning live trends into memes — a real-time data pipeline + LLM project.**
 🔗 **Live demo:** https://trendpulse-streaming.streamlit.app
-![TrendPulse screenshot](demo.png)
+![TrendPulse screenshot](demo1.png)
 
 ## What it does
 1. Reads trending topics from Reddit / news RSS
