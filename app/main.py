@@ -13,10 +13,12 @@ from src.llm.meme_generator import generate_caption
 st.set_page_config(page_title="TrendPulse", page_icon="🎭")
 
 # Signature
-st.markdown(
-    "<p style='text-align: left; font-size: 14px; color: #888; margin-bottom: -10px;'>SKM</p>",
-    unsafe_allow_html=True
-)
+col1, col2 = st.columns([1, 11])
+with col1:
+    st.markdown(
+        "<p style='font-size: 14px; color: #888; margin: 0;'>SKM</p>",
+        unsafe_allow_html=True
+    )
 
 # Fun fact (now after set_page_config)
 FUN_FACTS = [
