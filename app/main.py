@@ -21,6 +21,11 @@ st.info(f"🧬 {random.choice(FUN_FACTS)}")
 
 st.set_page_config(page_title="TrendPulse", page_icon="🎭")
 
+st.markdown(
+    "<p style='text-align: left; font-size: 14px; color: #888; margin-bottom: -10px;'>SKM</p>",
+    unsafe_allow_html=True
+)
+
 st.title("🎭 TrendPulse")
 st.caption("Live trends → AI-generated memes")
 
