@@ -1,3 +1,4 @@
+import os
 from groq import Groq
 
 KEY_PATH = "/home/mglocadmin/Downloads/grok_api.txt"
