@@ -6,7 +6,7 @@ from src.llm.meme_generator import generate_caption
 
 
 KAFKA_BROKER = "localhost:9092"
-TOPIC = "reddit-trends"
+TOPIC = "trendpulse-sources"
 GROUP_ID = "trendpulse-consumer-group"
 OUTPUT_FILE = "data/memes.jsonl"
 
@@ -23,19 +23,18 @@ def create_consumer():
     )
 
 
-def save_meme(topic_title: str, link: str, subreddit: str, meme: str):
-    """Append one meme to the output file."""
+def save_meme(topic_title, link, source, meme, emoji="😂"):
     os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
     record = {
         "topic": topic_title,
         "link": link,
-        "subreddit": subreddit,
+        "source": source,
         "meme": meme,
+        "emoji": emoji,
         "processed_at": time.time(),
     }
     with open(OUTPUT_FILE, "a") as f:
         f.write(json.dumps(record) + "\n")
-
 
 def run_consumer():
     """Read messages from Kafka, generate memes, save to file."""
@@ -49,12 +48,12 @@ def run_consumer():
         data = message.value
         title = data["title"]
         link = data["link"]
-        subreddit = data.get("subreddit", "unknown")
+        source = data.get("source", "unknown")
 
         print(f"[offset {message.offset}] {title[:60]}")
-        meme = generate_caption(title)
-        save_meme(title, link, subreddit, meme)
-        print(f"  → meme: {meme}\n")
+        result = generate_caption(title)
+        save_meme(title, link, source, result["caption"], result["emoji"])
+        print(f"  → meme: {result['emoji']} {result['caption']}\n")
 
 
 if __name__ == "__main__":
