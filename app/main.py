@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import random
+from datetime import datetime
 
 # Allow imports from src/
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -44,14 +45,14 @@ FUN_FACTS = [
 ]
 st.info(f"🧬 {random.choice(FUN_FACTS)}")
 
-# Title
+# Title with bouncing emoji
 st.markdown(
     "<h1><span class='bouncing-emoji'>🎭</span> TrendPulse</h1>",
     unsafe_allow_html=True
 )
 st.caption("Live trends → AI-generated memes (streamed via Kafka)")
 
-# Load memes from the consumer's output file
+# Load memes
 MEMES_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "memes.jsonl")
 
 
@@ -74,11 +75,31 @@ def load_memes():
     return memes
 
 
+def get_last_updated(memes):
+    """Return the timestamp of the most recent meme."""
+    if not memes:
+        return None
+    timestamps = [m.get("processed_at", 0) for m in memes if m.get("processed_at")]
+    if not timestamps:
+        return None
+    latest = max(timestamps)
+    return datetime.fromtimestamp(latest).strftime("%b %d, %Y %H:%M")
+
+
 all_memes = load_memes()
 
-# Stats
+# ---------- Stats row ----------
 if all_memes:
-    st.success(f"📊 {len(all_memes)} memes streamed via Kafka")
+    last_updated = get_last_updated(all_memes)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total memes", len(all_memes))
+    with col2:
+        sources_count = len(set(m.get("source", "unknown") for m in all_memes))
+        st.metric("Sources", sources_count)
+    with col3:
+        st.metric("Last updated", last_updated or "—")
 else:
     st.warning("No memes yet. Run the Kafka producer and consumer to start streaming.")
     st.code(
@@ -88,7 +109,7 @@ else:
         language="bash"
     )
 
-# Filter by source
+# ---------- Source emojis ----------
 SOURCE_EMOJI = {
     "india": "🇮🇳",
     "worldnews": "🌍",
@@ -96,43 +117,66 @@ SOURCE_EMOJI = {
     "cricket": "🏏",
 }
 
+# ---------- Filters ----------
 if all_memes:
-    found_sources = set(m.get("source", "unknown") for m in all_memes)
-    all_sources = ["india", "worldnews", "bengaluru", "cricket"]
-    sources = sorted(set(all_sources) | found_sources)
+    col_filter, col_search = st.columns([1, 2])
 
-    display_options = ["🌐 all"] + [
-        f"{SOURCE_EMOJI.get(s, '📌')} {s}" for s in sources
-    ]
-    selected_label = st.selectbox("Filter by source", display_options)
-    selected = selected_label.split(" ", 1)[1]
+    with col_filter:
+        found_sources = set(m.get("source", "unknown") for m in all_memes)
+        all_sources = ["india", "worldnews", "bengaluru", "cricket"]
+        sources = sorted(set(all_sources) | found_sources)
 
+        display_options = ["🌐 all"] + [
+            f"{SOURCE_EMOJI.get(s, '📌')} {s}" for s in sources
+        ]
+        selected_label = st.selectbox("Filter by source", display_options)
+        selected = selected_label.split(" ", 1)[1]
+
+    with col_search:
+        query = st.text_input("Search memes", placeholder="e.g. cricket, salary...")
+
+    # Apply filters
     if selected != "all":
         filtered = [m for m in all_memes if m.get("source") == selected]
     else:
         filtered = all_memes
 
+    if query:
+        q = query.lower()
+        filtered = [
+            m for m in filtered
+            if q in m.get("meme", "").lower() or q in m.get("topic", "").lower()
+        ]
+
     filtered = list(reversed(filtered))
 
-    limit = st.slider("How many to show?", 3, min(50, len(filtered)), min(10, len(filtered)))
+    # Slider
+    if len(filtered) == 0:
+        st.info("No memes match your filters. Try a different search or source.")
+    else:
+        limit = st.slider(
+            "How many to show?",
+            3,
+            min(50, len(filtered)),
+            min(10, len(filtered))
+        )
 
-    for m in filtered[:limit]:
-        st.markdown(f"**{m['topic']}**")
-
-        emoji = m.get("emoji", "😂")
-        st.markdown(
-            f"""
-            <div style='background-color: #d4edda; border-left: 4px solid #28a745; 
-                        padding: 10px; border-radius: 4px; color: #155724; margin: 8px 0;'>
-                <strong>Meme:</strong> 
-                <span class='bouncing-emoji'>{emoji}</span> {m['meme']}
-            </div>
-            """,
-            unsafe_allow_html=True
-    )
-
-    st.caption(f"[Read original]({m['link']}) · {m.get('source', 'unknown')}")
-    st.divider()
+        # ---------- Meme list ----------
+        for m in filtered[:limit]:
+            st.markdown(f"**{m['topic']}**")
+            emoji = m.get("emoji", "😂")
+            st.markdown(
+                f"""
+                <div style='background-color: #d4edda; border-left: 4px solid #28a745;
+                            padding: 10px; border-radius: 4px; color: #155724; margin: 8px 0;'>
+                    <strong>Meme:</strong>
+                    <span class='bouncing-emoji'>{emoji}</span> {m['meme']}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            st.caption(f"[Read original]({m['link']}) · {m.get('source', 'unknown')}")
+            st.divider()
 
 # Refresh button
 if st.button("🔄 Refresh"):
