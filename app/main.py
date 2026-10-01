@@ -11,6 +11,21 @@ import streamlit as st
 # MUST be the first Streamlit command
 st.set_page_config(page_title="TrendPulse", page_icon="🎭")
 
+# Bounce animation CSS
+st.markdown("""
+<style>
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-6px); }
+}
+.bouncing-emoji {
+    display: inline-block;
+    animation: bounce 1s infinite ease-in-out;
+    font-size: 1.2em;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Signature
 col1, col2 = st.columns([1, 11])
 with col1:
@@ -30,7 +45,10 @@ FUN_FACTS = [
 st.info(f"🧬 {random.choice(FUN_FACTS)}")
 
 # Title
-st.title("🎭 TrendPulse")
+st.markdown(
+    "<h1><span class='bouncing-emoji'>🎭</span> TrendPulse</h1>",
+    unsafe_allow_html=True
+)
 st.caption("Live trends → AI-generated memes (streamed via Kafka)")
 
 # Load memes from the consumer's output file
@@ -42,14 +60,17 @@ def load_memes():
     if not os.path.exists(MEMES_FILE):
         return []
     memes = []
-    with open(MEMES_FILE, "r") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                try:
-                    memes.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
+    try:
+        with open(MEMES_FILE, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        memes.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+    except Exception:
+        return []
     return memes
 
 
@@ -80,29 +101,38 @@ if all_memes:
     all_sources = ["india", "worldnews", "bengaluru", "cricket"]
     sources = sorted(set(all_sources) | found_sources)
 
-    # Build display labels with emojis
     display_options = ["🌐 all"] + [
         f"{SOURCE_EMOJI.get(s, '📌')} {s}" for s in sources
     ]
     selected_label = st.selectbox("Filter by source", display_options)
-    selected = selected_label.split(" ", 1)[1]  # extract raw name
+    selected = selected_label.split(" ", 1)[1]
 
     if selected != "all":
         filtered = [m for m in all_memes if m.get("source") == selected]
     else:
         filtered = all_memes
 
-    # Show latest first
     filtered = list(reversed(filtered))
 
-    # Slider for how many to show
     limit = st.slider("How many to show?", 3, min(50, len(filtered)), min(10, len(filtered)))
 
     for m in filtered[:limit]:
         st.markdown(f"**{m['topic']}**")
-        st.success(f"**Meme:** {m.get('emoji', '😂')} {m['meme']}")
-        st.caption(f"[Read original]({m['link']}) · {m.get('source', 'unknown')}")
-        st.divider()
+
+        emoji = m.get("emoji", "😂")
+        st.markdown(
+            f"""
+            <div style='background-color: #d4edda; border-left: 4px solid #28a745; 
+                        padding: 10px; border-radius: 4px; color: #155724; margin: 8px 0;'>
+                <strong>Meme:</strong> 
+                <span class='bouncing-emoji'>{emoji}</span> {m['meme']}
+            </div>
+            """,
+            unsafe_allow_html=True
+    )
+
+    st.caption(f"[Read original]({m['link']}) · {m.get('source', 'unknown')}")
+    st.divider()
 
 # Refresh button
 if st.button("🔄 Refresh"):
