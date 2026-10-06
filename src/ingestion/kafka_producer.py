@@ -60,7 +60,7 @@
 import json
 import time
 from kafka import KafkaProducer
-from src.ingestion.reddit_ingester import get_trending_topics
+from src.ingestion.news_ingester import get_trending_topics
 
 
 KAFKA_BROKER = "localhost:9092"

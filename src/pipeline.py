@@ -1,4 +1,4 @@
-from src.ingestion.reddit_ingester import get_trending_topics
+from src.ingestion.news_ingester import get_trending_topics
 from src.llm.meme_generator import generate_caption
 
 
