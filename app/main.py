@@ -1,18 +1,19 @@
 import sys
 import os
-import json
 import random
 from datetime import datetime
 
-# Allow imports from src/
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import streamlit as st
+from pyspark.sql import SparkSession
+from delta import configure_spark_with_delta_pip
+import traceback
 
 # MUST be the first Streamlit command
 st.set_page_config(page_title="TrendPulse", page_icon="🎭")
 
-# Bounce animation CSS
+# ---------- Bounce animation ----------
 st.markdown("""
 <style>
 @keyframes bounce {
@@ -27,7 +28,70 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Signature
+# ---------- Paths ----------
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+SILVER_PATH = os.path.join(BASE_DIR, "delta", "silver", "memes")
+GOLD_SOURCE_PATH = os.path.join(BASE_DIR, "delta", "gold", "source_stats")
+GOLD_DAILY_PATH = os.path.join(BASE_DIR, "delta", "gold", "daily_stats")
+
+# ---------- Cached Spark session ----------
+@st.cache_resource
+def get_spark():
+    spark = (SparkSession.builder
+        .appName("TrendPulse-UI")
+        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.2.0")
+        .config("spark.sql.shuffle.partitions", "4")
+        .master("local[*]"))
+    return spark.getOrCreate()
+
+
+# ---------- Data loaders ----------
+# @st.cache_data(ttl=30)
+# def load_silver():
+#     spark = get_spark()
+#     try:
+#         df = spark.read.format("delta").load(SILVER_PATH)
+#         return df.toPandas()
+#     except Exception:
+#         return None
+
+
+
+@st.cache_data(ttl=30)
+def load_silver():
+    spark = get_spark()
+    try:
+        df = spark.read.format("delta").load(SILVER_PATH)
+        return df.toPandas()
+    except Exception as e:
+        print(f"[load_silver] FAILED: {e}")
+        traceback.print_exc()
+        return None
+
+
+@st.cache_data(ttl=30)
+def load_source_stats():
+    spark = get_spark()
+    try:
+        df = spark.read.format("delta").load(GOLD_SOURCE_PATH)
+        return df.toPandas()
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=30)
+def load_daily_stats():
+    spark = get_spark()
+    try:
+        df = spark.read.format("delta").load(GOLD_DAILY_PATH)
+        return df.toPandas()
+    except Exception:
+        return None
+
+
+# ---------- Signature ----------
 col1, col2 = st.columns([1, 11])
 with col1:
     st.markdown(
@@ -35,9 +99,9 @@ with col1:
         unsafe_allow_html=True
     )
 
-# Fun fact
+# ---------- Fun fact ----------
 FUN_FACTS = [
-    "The word 'meme' was coined by biologist Richard Dawkins in 1976 — long before the internet existed.",
+    "The word 'meme' was coined by biologist Richard Dawkins in 1976.",
     "The first viral internet meme was a dancing baby animation in 1996.",
     "'Meme' comes from the Greek word 'mimema', meaning 'something imitated'.",
     "Dawkins later said internet memes were 'hijacking' his original idea.",
@@ -45,139 +109,80 @@ FUN_FACTS = [
 ]
 st.info(f"🧬 {random.choice(FUN_FACTS)}")
 
-# Title with bouncing emoji
+# ---------- Title ----------
 st.markdown(
     "<h1><span class='bouncing-emoji'>🎭</span> TrendPulse</h1>",
     unsafe_allow_html=True
 )
-st.caption("Live trends → AI-generated memes (streamed via Kafka)")
+st.caption("Live trends → AI-generated memes (streamed via Kafka + PySpark + Delta Lake)")
 
-# Load memes
-MEMES_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "memes.jsonl")
+# ---------- Load all data ----------
+silver = load_silver()
+source_stats = load_source_stats()
+daily_stats = load_daily_stats()
 
-
-def load_memes():
-    """Read all memes from the JSONL file."""
-    if not os.path.exists(MEMES_FILE):
-        return []
-    memes = []
-    try:
-        with open(MEMES_FILE, "r") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    try:
-                        memes.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        continue
-    except Exception:
-        return []
-    return memes
-
-
-def get_last_updated(memes):
-    """Return the timestamp of the most recent meme."""
-    if not memes:
-        return None
-    timestamps = [m.get("processed_at", 0) for m in memes if m.get("processed_at")]
-    if not timestamps:
-        return None
-    latest = max(timestamps)
-    return datetime.fromtimestamp(latest).strftime("%b %d, %Y %H:%M")
-
-
-all_memes = load_memes()
-
-# ---------- Stats row ----------
-if all_memes:
-    last_updated = get_last_updated(all_memes)
-
+# ---------- Section 1: Today's stats ----------
+if daily_stats is not None and len(daily_stats) > 0:
+    st.subheader("📊 Latest Stats")
+    latest_day = daily_stats.iloc[0]
     col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total memes", len(all_memes))
-    with col2:
-        sources_count = len(set(m.get("source", "unknown") for m in all_memes))
-        st.metric("Sources", sources_count)
-    with col3:
-        st.metric("Last updated", last_updated or "—")
+    col1.metric("Memes today", int(latest_day["total_memes"]))
+    col2.metric("Active sources", int(latest_day["sources_active"]))
+    col3.metric("Top source", str(latest_day["top_source"]).title())
 else:
-    st.warning("No memes yet. Run the Kafka producer and consumer to start streaming.")
-    st.code(
-        "# In two terminals:\n"
-        "python -m src.ingestion.kafka_producer\n"
-        "python -m src.processing.kafka_consumer",
-        language="bash"
+    st.info("📊 Stats will appear here once the pipeline processes data.")
+    with st.expander("⚙️ Developer: build gold layer"):
+        st.code("python -m src.processing.gold_worker", language="bash")
+
+# ---------- Section 2: Source breakdown ----------
+if source_stats is not None and len(source_stats) > 0:
+    st.subheader("📈 Source Breakdown")
+    for _, row in source_stats.iterrows():
+        source = str(row["source"])
+        emoji_map = {"india": "🇮🇳", "worldnews": "🌍", "bengaluru": "🏙️", "cricket": "🏏"}
+        icon = emoji_map.get(source, "📌")
+        with st.expander(f"{icon} {source.title()} — {int(row['total_memes'])} memes"):
+            st.markdown(f"**Latest meme:** {row['latest_emoji']} {row['latest_meme']}")
+
+# ---------- Section 3: Latest memes ----------
+if silver is not None and len(silver) > 0:
+    st.subheader("🎭 Latest Memes")
+
+    source_filter = st.selectbox(
+        "Filter by source",
+        ["all"] + sorted(silver["source"].unique().tolist())
     )
 
-# ---------- Source emojis ----------
-SOURCE_EMOJI = {
-    "india": "🇮🇳",
-    "worldnews": "🌍",
-    "bengaluru": "🏙️",
-    "cricket": "🏏",
-}
+    limit = st.slider("How many to show?", 3, min(50, len(silver)), 10)
 
-# ---------- Filters ----------
-if all_memes:
-    col_filter, col_search = st.columns([1, 2])
+    filtered = silver if source_filter == "all" else silver[silver["source"] == source_filter]
+    filtered = filtered.sort_values("processed_at", ascending=False).head(limit)
 
-    with col_filter:
-        found_sources = set(m.get("source", "unknown") for m in all_memes)
-        all_sources = ["india", "worldnews", "bengaluru", "cricket"]
-        sources = sorted(set(all_sources) | found_sources)
-
-        display_options = ["🌐 all"] + [
-            f"{SOURCE_EMOJI.get(s, '📌')} {s}" for s in sources
-        ]
-        selected_label = st.selectbox("Filter by source", display_options)
-        selected = selected_label.split(" ", 1)[1]
-
-    with col_search:
-        query = st.text_input("Search memes", placeholder="e.g. cricket, salary...")
-
-    # Apply filters
-    if selected != "all":
-        filtered = [m for m in all_memes if m.get("source") == selected]
-    else:
-        filtered = all_memes
-
-    if query:
-        q = query.lower()
-        filtered = [
-            m for m in filtered
-            if q in m.get("meme", "").lower() or q in m.get("topic", "").lower()
-        ]
-
-    filtered = list(reversed(filtered))
-
-    # Slider
-    if len(filtered) == 0:
-        st.info("No memes match your filters. Try a different search or source.")
-    else:
-        limit = st.slider(
-            "How many to show?",
-            3,
-            min(50, len(filtered)),
-            min(10, len(filtered))
+    for _, row in filtered.iterrows():
+        st.markdown(f"**{row['topic']}**")
+        st.markdown(
+            f"""
+            <div style='background-color: #d4edda; border-left: 4px solid #28a745;
+                        padding: 10px; border-radius: 4px; color: #155724; margin: 8px 0;'>
+                <strong>Meme:</strong>
+                <span class='bouncing-emoji'>{row['emoji']}</span> {row['meme']}
+            </div>
+            """,
+            unsafe_allow_html=True
         )
-
-        # ---------- Meme list ----------
-        for m in filtered[:limit]:
-            st.markdown(f"**{m['topic']}**")
-            emoji = m.get("emoji", "😂")
-            st.markdown(
-                f"""
-                <div style='background-color: #d4edda; border-left: 4px solid #28a745;
-                            padding: 10px; border-radius: 4px; color: #155724; margin: 8px 0;'>
-                    <strong>Meme:</strong>
-                    <span class='bouncing-emoji'>{emoji}</span> {m['meme']}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-            st.caption(f"[Read original]({m['link']}) · {m.get('source', 'unknown')}")
-            st.divider()
-
-# Refresh button
+        st.caption(f"[Read original]({row['link']}) · {row['source']}")
+        st.divider()
+else:
+    st.info("🎭 No memes yet — the pipeline is warming up.")
+    st.caption("Memes will appear here as soon as new trends are processed.")
+    with st.expander("⚙️ Developer: how to start the pipeline"):
+        st.code(
+            "python -m src.ingestion.kafka_producer\n"
+            "python -m src.processing.spark_consumer\n"
+            "python -m src.processing.silver_worker\n"
+            "python -m src.processing.gold_worker",
+            language="bash"
+        )
 if st.button("🔄 Refresh"):
+    st.cache_data.clear()
     st.rerun()
