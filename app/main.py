@@ -6,9 +6,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import streamlit as st
-from pyspark.sql import SparkSession
-from delta import configure_spark_with_delta_pip
-import traceback
+from deltalake import DeltaTable
 
 # MUST be the first Streamlit command
 st.set_page_config(page_title="TrendPulse", page_icon="🎭")
@@ -34,60 +32,32 @@ SILVER_PATH = os.path.join(BASE_DIR, "delta", "silver", "memes")
 GOLD_SOURCE_PATH = os.path.join(BASE_DIR, "delta", "gold", "source_stats")
 GOLD_DAILY_PATH = os.path.join(BASE_DIR, "delta", "gold", "daily_stats")
 
-# ---------- Cached Spark session ----------
-@st.cache_resource
-def get_spark():
-    spark = (SparkSession.builder
-        .appName("TrendPulse-UI")
-        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-        .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.2.0")
-        .config("spark.sql.shuffle.partitions", "4")
-        .master("local[*]"))
-    return spark.getOrCreate()
 
-
-# ---------- Data loaders ----------
-# @st.cache_data(ttl=30)
-# def load_silver():
-#     spark = get_spark()
-#     try:
-#         df = spark.read.format("delta").load(SILVER_PATH)
-#         return df.toPandas()
-#     except Exception:
-#         return None
-
-
-
+# ---------- Data loaders (no Spark) ----------
 @st.cache_data(ttl=30)
 def load_silver():
-    spark = get_spark()
     try:
-        df = spark.read.format("delta").load(SILVER_PATH)
-        return df.toPandas()
+        return DeltaTable(SILVER_PATH).to_pandas()
     except Exception as e:
-        print(f"[load_silver] FAILED: {e}")
-        traceback.print_exc()
+        print(f"[load_silver] failed: {e}")
         return None
 
 
 @st.cache_data(ttl=30)
 def load_source_stats():
-    spark = get_spark()
     try:
-        df = spark.read.format("delta").load(GOLD_SOURCE_PATH)
-        return df.toPandas()
-    except Exception:
+        return DeltaTable(GOLD_SOURCE_PATH).to_pandas()
+    except Exception as e:
+        print(f"[load_source_stats] failed: {e}")
         return None
 
 
 @st.cache_data(ttl=30)
 def load_daily_stats():
-    spark = get_spark()
     try:
-        df = spark.read.format("delta").load(GOLD_DAILY_PATH)
-        return df.toPandas()
-    except Exception:
+        return DeltaTable(GOLD_DAILY_PATH).to_pandas()
+    except Exception as e:
+        print(f"[load_daily_stats] failed: {e}")
         return None
 
 
@@ -130,7 +100,7 @@ if daily_stats is not None and len(daily_stats) > 0:
     col2.metric("Active sources", int(latest_day["sources_active"]))
     col3.metric("Top source", str(latest_day["top_source"]).title())
 else:
-    st.info("📊 Stats will appear here once the pipeline processes data.")
+    st.info("📊 Stats will appear once the pipeline processes data.")
     with st.expander("⚙️ Developer: build gold layer"):
         st.code("python -m src.processing.gold_worker", language="bash")
 
@@ -183,6 +153,7 @@ else:
             "python -m src.processing.gold_worker",
             language="bash"
         )
+
 if st.button("🔄 Refresh"):
     st.cache_data.clear()
     st.rerun()
