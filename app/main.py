@@ -3,6 +3,8 @@ import os
 import random
 from datetime import datetime
 
+import json
+import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import streamlit as st
@@ -33,13 +35,42 @@ GOLD_SOURCE_PATH = os.path.join(BASE_DIR, "delta", "gold", "source_stats")
 GOLD_DAILY_PATH = os.path.join(BASE_DIR, "delta", "gold", "daily_stats")
 
 
-# ---------- Data loaders (no Spark) ----------
+# # ---------- Data loaders (no Spark) ----------
+# @st.cache_data(ttl=30)
+# def load_silver():
+#     try:
+#         return DeltaTable(SILVER_PATH).to_pandas()
+#     except Exception as e:
+#         print(f"[load_silver] failed: {e}")
+#         return None
+
+
+# @st.cache_data(ttl=30)
+# def load_source_stats():
+#     try:
+#         return DeltaTable(GOLD_SOURCE_PATH).to_pandas()
+#     except Exception as e:
+#         print(f"[load_source_stats] failed: {e}")
+#         return None
+
+
+# @st.cache_data(ttl=30)
+# def load_daily_stats():
+#     try:
+#         return DeltaTable(GOLD_DAILY_PATH).to_pandas()
+#     except Exception as e:
+#         print(f"[load_daily_stats] failed: {e}")
+#         return None
+
+
 @st.cache_data(ttl=30)
 def load_silver():
     try:
         return DeltaTable(SILVER_PATH).to_pandas()
-    except Exception as e:
-        print(f"[load_silver] failed: {e}")
+    except Exception:
+        json_path = os.path.join(BASE_DIR, "data", "silver_sample.json")
+        if os.path.exists(json_path):
+            return pd.read_json(json_path)
         return None
 
 
@@ -47,8 +78,10 @@ def load_silver():
 def load_source_stats():
     try:
         return DeltaTable(GOLD_SOURCE_PATH).to_pandas()
-    except Exception as e:
-        print(f"[load_source_stats] failed: {e}")
+    except Exception:
+        json_path = os.path.join(BASE_DIR, "data", "source_stats_sample.json")
+        if os.path.exists(json_path):
+            return pd.read_json(json_path)
         return None
 
 
@@ -56,11 +89,11 @@ def load_source_stats():
 def load_daily_stats():
     try:
         return DeltaTable(GOLD_DAILY_PATH).to_pandas()
-    except Exception as e:
-        print(f"[load_daily_stats] failed: {e}")
+    except Exception:
+        json_path = os.path.join(BASE_DIR, "data", "daily_stats_sample.json")
+        if os.path.exists(json_path):
+            return pd.read_json(json_path)
         return None
-
-
 # ---------- Signature ----------
 col1, col2 = st.columns([1, 11])
 with col1:
